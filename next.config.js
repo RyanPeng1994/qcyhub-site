@@ -11,6 +11,17 @@ const nextConfig = {
       { protocol: 'https', hostname: '**.supabase.co' },
     ],
   },
+  headers: async () => [
+    {
+      source: '/(.*)',
+      headers: [
+        {
+          key: 'Content-Security-Policy',
+          value: '',
+        },
+      ],
+    },
+  ],
 }
 
 module.exports = nextConfig
