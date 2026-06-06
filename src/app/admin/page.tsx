@@ -1,5 +1,6 @@
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase-server'
+import { createServerClient } from '@supabase/ssr'
 import { supabaseAdmin } from '@/lib/supabase-admin'
 import { isAdmin, CATEGORY_LABELS, ORDER_STATUS_LABEL, ORDER_STATUS_VARIANT, formatDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/Badge'
@@ -11,9 +12,44 @@ import { AdminProductForm } from './AdminProductForm'
 export const dynamic = 'force-dynamic'
 
 export default async function AdminPage() {
-  const supabase = await createClient()
+  const cookieStore = await cookies()
+  
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll() {},
+      },
+    }
+  )
+
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user || !isAdmin(user.email)) redirect('/')
+
+  // 如果服务端读不到，尝试从 token 读
+  let adminEmail = user?.email
+
+  // 如果还是没有，直接查数据库所有管理员邮箱对比
+  if (!adminEmail) {
+    // 从 cookie 里拿 token 手动验证
+    const allCookies = cookieStore.getAll()
+    const sbCookie = allCookies.find(c => c.name.startsWith('sb-') && c.name.endsWith('-auth-token'))
+    if (!sbCookie) redirect('/')
+    
+    try {
+      const parsed = JSON.parse(decodeURIComponent(sbCookie.value))
+      const token = parsed.access_token || parsed[0]?.access_token
+      if (!token) redirect('/')
+      
+      const { data } = await supabaseAdmin.auth.getUser(token)
+      adminEmail = data.user?.email
+    } catch {
+      redirect('/')
+    }
+  }
+
+  if (!adminEmail || !isAdmin(adminEmail)) redirect('/')
 
   const [
     { data: resources },
@@ -39,7 +75,6 @@ export default async function AdminPage() {
 
   const orders = (rawOrders ?? []) as any[]
   const pendingOrders = orders.filter(o => o.status === 'pending_review')
-  const otherOrders = orders.filter(o => o.status !== 'pending_review')
 
   const stats = [
     ['待审订单', pendingOrders.length],
@@ -50,16 +85,14 @@ export default async function AdminPage() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-10">
-      {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
           <Badge variant="blue" className="mb-2">管理后台</Badge>
           <h1 className="text-2xl font-bold text-white">后台管理</h1>
         </div>
-        <p className="text-xs text-slate-500">管理员：{user.email}</p>
+        <p className="text-xs text-slate-500">管理员：{adminEmail}</p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
         {stats.map(([l, n]) => (
           <div key={l} className="bg-qpanel border border-qblue/10 rounded-xl p-4 text-center">
@@ -69,7 +102,6 @@ export default async function AdminPage() {
         ))}
       </div>
 
-      {/* ─── PENDING ORDERS (审核中心) ─────────────────────────── */}
       <section className="mb-12">
         <div className="flex items-center gap-3 mb-4">
           <h2 className="text-lg font-bold text-white">🔔 待审核订单</h2>
@@ -79,16 +111,12 @@ export default async function AdminPage() {
             </span>
           )}
         </div>
-
         {pendingOrders.length === 0 ? (
-          <div className="bg-qpanel border border-qblue/10 rounded-xl p-8 text-center text-slate-500 text-sm">
-            暂无待审核订单
-          </div>
+          <div className="bg-qpanel border border-qblue/10 rounded-xl p-8 text-center text-slate-500 text-sm">暂无待审核订单</div>
         ) : (
           <div className="space-y-4">
             {pendingOrders.map((o: any) => (
               <div key={o.id} className="bg-qpanel border border-amber-500/20 rounded-xl overflow-hidden">
-                {/* Order header */}
                 <div className="flex items-center justify-between px-5 py-3 border-b border-qblue/10 bg-amber-500/5">
                   <div className="flex items-center gap-3">
                     <Badge variant="gold">待审核</Badge>
@@ -97,10 +125,7 @@ export default async function AdminPage() {
                   </div>
                   <AdminOrderActions orderId={o.id} />
                 </div>
-
-                {/* Order body */}
                 <div className="grid md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-qblue/10">
-                  {/* Left: order info */}
                   <div className="p-5 space-y-3">
                     <div>
                       <p className="text-xs text-slate-500 mb-1">商品</p>
@@ -116,39 +141,21 @@ export default async function AdminPage() {
                         <p className="text-sm font-mono font-bold text-qblue2">¥{o.amount}</p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-xs text-slate-500 mb-1">微信昵称</p>
-                        <p className="text-xs text-slate-300">{o.wechat_nickname || '-'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 mb-1">付款金额</p>
-                        <p className="text-xs text-slate-300 font-mono">¥{o.paid_amount}</p>
-                      </div>
-                    </div>
                     <div>
-                      <p className="text-xs text-slate-500 mb-1">付款时间（用户填写）</p>
-                      <p className="text-xs text-slate-300">{o.paid_at_claimed || '-'}</p>
+                      <p className="text-xs text-slate-500 mb-1">微信昵称</p>
+                      <p className="text-xs text-slate-300">{o.wechat_nickname || '-'}</p>
                     </div>
                   </div>
-
-                  {/* Right: screenshot */}
                   <div className="p-5">
                     <p className="text-xs text-slate-500 mb-2">付款截图</p>
                     {o.screenshot_url ? (
-                      <a href={o.screenshot_url} target="_blank" rel="noopener noreferrer"
-                        className="block group">
-                        <img
-                          src={o.screenshot_url}
-                          alt="付款截图"
-                          className="max-h-52 w-auto rounded-lg border border-qblue/20 object-contain group-hover:border-qblue/50 transition-all cursor-zoom-in"
-                        />
+                      <a href={o.screenshot_url} target="_blank" rel="noopener noreferrer" className="block group">
+                        <img src={o.screenshot_url} alt="付款截图"
+                          className="max-h-52 w-auto rounded-lg border border-qblue/20 object-contain group-hover:border-qblue/50 transition-all cursor-zoom-in" />
                         <p className="text-xs text-slate-600 mt-1.5 group-hover:text-qblue2 transition-colors">点击查看原图 ↗</p>
                       </a>
                     ) : (
-                      <div className="h-32 flex items-center justify-center bg-qdark2 rounded-lg border border-qblue/10 text-slate-600 text-xs">
-                        未上传截图
-                      </div>
+                      <div className="h-32 flex items-center justify-center bg-qdark2 rounded-lg border border-qblue/10 text-slate-600 text-xs">未上传截图</div>
                     )}
                   </div>
                 </div>
@@ -158,7 +165,6 @@ export default async function AdminPage() {
         )}
       </section>
 
-      {/* ─── ALL ORDERS ─────────────────────────────────────────── */}
       <section className="mb-12">
         <h2 className="text-lg font-bold text-white mb-4">📋 全部订单</h2>
         <div className="overflow-x-auto rounded-xl border border-qblue/10">
@@ -191,7 +197,6 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      {/* ─── PRODUCTS ───────────────────────────────────────────── */}
       <section className="mb-12">
         <h2 className="text-lg font-bold text-white mb-4">🛍️ 商品管理</h2>
         <AdminProductForm />
@@ -214,9 +219,7 @@ export default async function AdminPage() {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-qblue2 font-mono text-sm">¥{p.price}</td>
-                  <td className="px-4 py-3">
-                    {p.is_active ? <Badge variant="green">上架</Badge> : <Badge variant="gray">下架</Badge>}
-                  </td>
+                  <td className="px-4 py-3">{p.is_active ? <Badge variant="green">上架</Badge> : <Badge variant="gray">下架</Badge>}</td>
                   <td className="px-4 py-3"><AdminDeleteBtn id={p.id} type="product" /></td>
                 </tr>
               ))}
@@ -225,7 +228,6 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      {/* ─── RESOURCES ──────────────────────────────────────────── */}
       <section className="mb-12">
         <h2 className="text-lg font-bold text-white mb-4">📦 资源管理</h2>
         <AdminResourceForm />
@@ -250,7 +252,6 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      {/* ─── MEMBERS ────────────────────────────────────────────── */}
       <section className="mb-12">
         <h2 className="text-lg font-bold text-white mb-4">👥 会员列表</h2>
         <div className="overflow-x-auto rounded-xl border border-qblue/10">
@@ -278,7 +279,6 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      {/* ─── REFERRALS ──────────────────────────────────────────── */}
       <section>
         <h2 className="text-lg font-bold text-white mb-4">💰 推广佣金</h2>
         <div className="overflow-x-auto rounded-xl border border-qblue/10">
