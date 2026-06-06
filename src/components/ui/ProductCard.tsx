@@ -5,12 +5,12 @@ import { Button } from './Button'
 import { Badge } from './Badge'
 import { Card } from './Card'
 import { PayModal } from './PayModal'
+import { useUser } from '@/hooks/useUser'
 import { cn } from '@/lib/utils'
-import type { Product, Profile } from '@/types'
+import type { Product } from '@/types'
 
 interface ProductCardProps {
   product: Product
-  profile: Profile | null
 }
 
 const TYPE_ICON = {
@@ -25,9 +25,11 @@ const TYPE_BADGE = {
   course:   <Badge variant="green">单独课程</Badge>,
 }
 
-export function ProductCard({ product, profile }: ProductCardProps) {
+export function ProductCard({ product }: ProductCardProps) {
   const [showModal, setShowModal] = useState(false)
+  const { profile, loading } = useUser()
 
+  const isLoggedIn = !!profile
   const alreadyOwned =
     (product.grants_vip && profile?.is_vip) ||
     (product.grants_franchise && profile?.is_franchise)
@@ -35,7 +37,6 @@ export function ProductCard({ product, profile }: ProductCardProps) {
   return (
     <>
       <Card hover className="flex flex-col overflow-hidden relative">
-        {/* gradient top bar */}
         <div className={cn(
           'h-0.5 w-full',
           product.type === 'vip' ? 'bg-gradient-to-r from-amber-500 to-amber-300' :
@@ -43,7 +44,6 @@ export function ProductCard({ product, profile }: ProductCardProps) {
           'bg-gradient-to-r from-emerald-600 to-emerald-400'
         )} />
 
-        {/* Cover image */}
         {product.cover_url && (
           <div className="h-36 overflow-hidden bg-qdark2">
             <img src={product.cover_url} alt={product.name} className="w-full h-full object-cover" />
@@ -69,18 +69,21 @@ export function ProductCard({ product, profile }: ProductCardProps) {
               <span className="text-qblue2 font-bold text-sm">¥</span>
               <span className="text-3xl font-black text-white font-mono leading-none">{product.price}</span>
             </div>
-            {alreadyOwned ? (
+
+            {loading ? (
+              <span className="text-xs text-slate-500">加载中...</span>
+            ) : alreadyOwned ? (
               <span className="text-xs text-emerald-400 border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 rounded-lg">
                 ✅ 已拥有
               </span>
-            ) : !profile ? (
-              <a href="/login">
-                <Button size="sm">登录后购买</Button>
-              </a>
-            ) : (
+            ) : isLoggedIn ? (
               <Button size="sm" onClick={() => setShowModal(true)}>
                 立即购买
               </Button>
+            ) : (
+              <a href="/login">
+                <Button size="sm">登录后购买</Button>
+              </a>
             )}
           </div>
         </div>
