@@ -45,12 +45,11 @@ const handleSubmit = async () => {
   setSubmitting(true); setError('')
 
   try {
-    // 直接从 supabase 获取当前用户，不依赖 useUser hook
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) throw new Error('请先登录后再提交')
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('请先登录后再提交')
 
     const ext = file.name.split('.').pop()
-    const path = `${user.id}/${Date.now()}.${ext}`
+    const path = `${session.user.id}/${Date.now()}.${ext}`
     const { error: uploadErr } = await supabase.storage
       .from('payment-screenshots')
       .upload(path, file, { cacheControl: '3600', upsert: false })
@@ -63,7 +62,10 @@ const handleSubmit = async () => {
 
     const res = await fetch('/api/orders/submit', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
       body: JSON.stringify({
         product_id: product.id,
         wechat_nickname: nickname.trim(),
