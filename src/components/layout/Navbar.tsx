@@ -68,7 +68,7 @@ export function Navbar() {
           </>
         ) : (
           <>
-            <Link href="/auth/login"
+            <Link href="/login"
               className="text-sm border border-qblue/20 text-slate-400 hover:border-qblue/50 hover:text-qblue2 px-4 py-1.5 rounded transition-all">
               登录
             </Link>
@@ -98,7 +98,7 @@ export function Navbar() {
             <button onClick={handleLogout} className="px-6 py-3.5 text-sm text-slate-400 text-left">退出登录</button>
           ) : (
             <>
-              <Link href="/auth/login" onClick={() => setOpen(false)} className="px-6 py-3.5 text-sm text-slate-400">登录</Link>
+              <Link href="/login" onClick={() => setOpen(false)} className="px-6 py-3.5 text-sm text-slate-400">登录</Link>
               <Link href="/vip" onClick={() => setOpen(false)} className="px-6 py-3.5 text-sm text-qblue2 font-medium">开通VIP · ¥99</Link>
             </>
           )}
