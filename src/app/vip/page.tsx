@@ -44,7 +44,7 @@ export default async function VipPage() {
       {/* Product cards */}
       <div className="grid md:grid-cols-2 gap-6 mb-16">
         {products?.map(p => (
-          <ProductCard key={p.id} product={p as any} profile={profile as any} />
+          <ProductCard key={p.id} product={p as any} />
         ))}
       </div>
 
