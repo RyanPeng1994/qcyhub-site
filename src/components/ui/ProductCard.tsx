@@ -74,7 +74,7 @@ export function ProductCard({ product, profile }: ProductCardProps) {
                 ✅ 已拥有
               </span>
             ) : !profile ? (
-              <a href="/auth/login">
+              <a href="/login">
                 <Button size="sm">登录后购买</Button>
               </a>
             ) : (
