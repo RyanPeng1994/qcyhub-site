@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { X, Upload, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { X, Upload, CheckCircle, AlertCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase-browser'
 import { Button } from './Button'
 import { Input } from './Input'
@@ -19,8 +19,6 @@ export function PayModal({ product, onClose }: PayModalProps) {
   const [step, setStep] = useState<Step>('qr')
   const [orderId, setOrderId] = useState<string | null>(null)
   const [nickname, setNickname] = useState('')
-  const [paidAmount, setPaidAmount] = useState(String(product.price))
-  const [paidAtClaimed, setPaidAtClaimed] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -40,18 +38,14 @@ export function PayModal({ product, onClose }: PayModalProps) {
 
   const handleSubmit = async () => {
     if (!nickname.trim()) { setError('请填写微信昵称'); return }
-    if (!paidAmount || isNaN(Number(paidAmount))) { setError('请填写付款金额'); return }
-    if (!paidAtClaimed.trim()) { setError('请填写付款时间'); return }
     if (!file) { setError('请上传付款截图'); return }
 
     setSubmitting(true); setError('')
 
     try {
-      // 1. Get current user
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('请先登录')
 
-      // 2. Upload screenshot to Supabase Storage
       const ext = file.name.split('.').pop()
       const path = `${user.id}/${Date.now()}.${ext}`
       const { error: uploadErr } = await supabase.storage
@@ -59,21 +53,19 @@ export function PayModal({ product, onClose }: PayModalProps) {
         .upload(path, file, { cacheControl: '3600', upsert: false })
       if (uploadErr) throw new Error('截图上传失败：' + uploadErr.message)
 
-      // 3. Get public/signed URL
       const { data: urlData } = supabase.storage
         .from('payment-screenshots')
         .getPublicUrl(path)
       const screenshotUrl = urlData?.publicUrl ?? path
 
-      // 4. Submit order
       const res = await fetch('/api/orders/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           product_id: product.id,
           wechat_nickname: nickname.trim(),
-          paid_amount: Number(paidAmount),
-          paid_at_claimed: paidAtClaimed.trim(),
+          paid_amount: product.price,
+          paid_at_claimed: new Date().toLocaleString('zh-CN'),
           screenshot_url: screenshotUrl,
         }),
       })
@@ -92,15 +84,13 @@ export function PayModal({ product, onClose }: PayModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
       <div className="relative w-full max-w-md bg-qpanel border border-qblue/30 rounded-2xl overflow-hidden shadow-2xl shadow-black/60">
-        {/* Top gradient bar */}
         <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-qbluedark via-qblue to-qaccent" />
 
-        {/* Close */}
         <button onClick={onClose} className="absolute top-3 right-3 p-1.5 text-slate-500 hover:text-white transition-colors rounded-lg hover:bg-white/5">
           <X size={18} />
         </button>
 
-        {/* ─── STEP 1: QR Code ─────────────────────────────────── */}
+        {/* STEP 1: QR Code */}
         {step === 'qr' && (
           <div className="p-6">
             <div className="text-center mb-5">
@@ -112,14 +102,12 @@ export function PayModal({ product, onClose }: PayModalProps) {
               <p className="text-slate-500 text-xs mt-1">微信扫码付款</p>
             </div>
 
-            {/* Product perks */}
             {product.description && (
               <div className="mb-4 p-3 bg-qdark2 border border-qblue/10 rounded-xl text-xs text-slate-400 leading-relaxed">
                 {product.description}
               </div>
             )}
 
-            {/* QR Code */}
             <div className="bg-white rounded-xl p-4 flex items-center justify-center mb-4 mx-auto w-52 h-52">
               <img
                 src="/images/pay-qr.jpg"
@@ -128,10 +116,11 @@ export function PayModal({ product, onClose }: PayModalProps) {
                 onError={(e) => {
                   const t = e.currentTarget
                   t.style.display = 'none'
-                  t.nextElementSibling?.classList.remove('hidden')
+                  const next = t.nextElementSibling as HTMLElement
+                  if (next) next.style.display = 'flex'
                 }}
               />
-              <div className="hidden flex-col items-center gap-2 text-slate-400">
+              <div style={{display:'none'}} className="flex-col items-center gap-2 text-slate-400 w-full h-full justify-center">
                 <div className="w-16 h-16 border-2 border-dashed border-slate-600 rounded-xl flex items-center justify-center text-2xl">📱</div>
                 <p className="text-xs text-center">请将二维码图片<br/>放到 /public/images/pay-qr.jpg</p>
               </div>
@@ -148,7 +137,7 @@ export function PayModal({ product, onClose }: PayModalProps) {
           </div>
         )}
 
-        {/* ─── STEP 2: Upload Screenshot ───────────────────────── */}
+        {/* STEP 2: Upload */}
         {step === 'upload' && (
           <div className="p-6">
             <h2 className="text-base font-bold text-white mb-4">📤 上传付款凭证</h2>
@@ -160,22 +149,7 @@ export function PayModal({ product, onClose }: PayModalProps) {
                 value={nickname}
                 onChange={e => setNickname(e.target.value)}
               />
-              <Input
-                label="付款金额（元）"
-                type="number"
-                step="0.01"
-                placeholder={String(product.price)}
-                value={paidAmount}
-                onChange={e => setPaidAmount(e.target.value)}
-              />
-              <Input
-                label="付款时间"
-                placeholder="例如：2024-01-15 14:30"
-                value={paidAtClaimed}
-                onChange={e => setPaidAtClaimed(e.target.value)}
-              />
 
-              {/* Screenshot upload */}
               <div>
                 <p className="text-sm text-slate-400 mb-2">付款截图</p>
                 <input
@@ -229,7 +203,7 @@ export function PayModal({ product, onClose }: PayModalProps) {
           </div>
         )}
 
-        {/* ─── STEP 3: Done ────────────────────────────────────── */}
+        {/* STEP 3: Done */}
         {step === 'done' && (
           <div className="p-8 text-center">
             <CheckCircle size={52} className="text-emerald-400 mx-auto mb-4" />
@@ -243,11 +217,7 @@ export function PayModal({ product, onClose }: PayModalProps) {
               </p>
             )}
             <p className="text-xs text-slate-600 mb-6">审核通过后权益将自动发放，如有疑问请联系微信客服：qcyhub</p>
-            <Button
-              onClick={() => { onClose(); router.refresh() }}
-              className="w-full"
-              size="md"
-            >
+            <Button onClick={() => { onClose(); router.refresh() }} className="w-full" size="md">
               知道了
             </Button>
           </div>
