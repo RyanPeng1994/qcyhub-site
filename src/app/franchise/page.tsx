@@ -26,7 +26,7 @@ export default async function FranchisePage() {
       </div>
       <div className="grid md:grid-cols-2 gap-6 mb-12">
         {products?.map(p => (
-          <ProductCard key={p.id} product={p as any} profile={profile as any} />
+          <ProductCard key={p.id} product={p as any} />
         ))}
       </div>
       <div className="grid sm:grid-cols-2 gap-5">
