@@ -3,6 +3,7 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { X, Upload, CheckCircle, AlertCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase-browser'
+import { useUser } from '@/hooks/useUser'
 import { Button } from './Button'
 import { Input } from './Input'
 import { cn } from '@/lib/utils'
@@ -26,6 +27,7 @@ export function PayModal({ product, onClose }: PayModalProps) {
   const fileRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
+  const { profile } = useUser()
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
@@ -37,17 +39,15 @@ export function PayModal({ product, onClose }: PayModalProps) {
   }
 
   const handleSubmit = async () => {
+    if (!profile) { setError('请先登录后再提交'); return }
     if (!nickname.trim()) { setError('请填写微信昵称'); return }
     if (!file) { setError('请上传付款截图'); return }
 
     setSubmitting(true); setError('')
 
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('请先登录')
-
       const ext = file.name.split('.').pop()
-      const path = `${user.id}/${Date.now()}.${ext}`
+      const path = `${profile.id}/${Date.now()}.${ext}`
       const { error: uploadErr } = await supabase.storage
         .from('payment-screenshots')
         .upload(path, file, { cacheControl: '3600', upsert: false })
@@ -90,7 +90,6 @@ export function PayModal({ product, onClose }: PayModalProps) {
           <X size={18} />
         </button>
 
-        {/* STEP 1: QR Code */}
         {step === 'qr' && (
           <div className="p-6">
             <div className="text-center mb-5">
@@ -137,7 +136,6 @@ export function PayModal({ product, onClose }: PayModalProps) {
           </div>
         )}
 
-        {/* STEP 2: Upload */}
         {step === 'upload' && (
           <div className="p-6">
             <h2 className="text-base font-bold text-white mb-4">📤 上传付款凭证</h2>
@@ -203,7 +201,6 @@ export function PayModal({ product, onClose }: PayModalProps) {
           </div>
         )}
 
-        {/* STEP 3: Done */}
         {step === 'done' && (
           <div className="p-8 text-center">
             <CheckCircle size={52} className="text-emerald-400 mx-auto mb-4" />
